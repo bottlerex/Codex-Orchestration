@@ -45,10 +45,11 @@ ALLOWED_RUNTIME_MODELS = frozenset(
 )
 ALLOWED_RUNTIME_MODELS_BY_PRIMARY = {
     FABLE_MODEL: ALLOWED_RUNTIME_MODELS,
-    # No Opus helper identity has been independently verified. Fail closed if
-    # Claude Code reports anything beyond the sealed primary.
-    OPUS_MODEL: frozenset({OPUS_MODEL}),
+    # Claude Code 2.1.251 reports this exact helper alongside the sealed Opus
+    # primary. Keep unknown helpers fail-closed.
+    OPUS_MODEL: frozenset({OPUS_MODEL, FABLE_HELPER_MODEL}),
 }
+MODEL_USAGE_STRING_FIELDS = frozenset({"canonicalModel", "provider", "costBasis"})
 CLAUDE_TIMEOUT_SECONDS = 600
 AUTH_TIMEOUT_SECONDS = 20
 # Applies to the combined user-controlled text sent by one model operation.
@@ -384,10 +385,15 @@ def _validate_runtime_models(
                 and math.isfinite(value)
                 and value >= 0
             )
+            is_known_metadata_string = (
+                field in MODEL_USAGE_STRING_FIELDS
+                and isinstance(value, str)
+                and bool(value.strip())
+            )
             if (
                 not isinstance(field, str)
                 or not field.strip()
-                or not is_nonnegative_finite_number
+                or not (is_nonnegative_finite_number or is_known_metadata_string)
             ):
                 raise AdvisorError(
                     "Runtime metadata has a malformed modelUsage value."

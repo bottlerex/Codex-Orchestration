@@ -661,6 +661,14 @@ class FableAdvisorMcpTests(unittest.TestCase):
             {FABLE.FABLE_MODEL: {"outputTokens": 10**309}},
             {FABLE.FABLE_MODEL: {"costUSD": 0.25, "outputTokens": 12}},
             {
+                FABLE.FABLE_MODEL: {
+                    "outputTokens": 12,
+                    "canonicalModel": "claude-fable-5",
+                    "provider": "firstParty",
+                    "costBasis": "list",
+                }
+            },
+            {
                 FABLE.FABLE_MODEL: {"outputTokens": 12},
                 FABLE.FABLE_HELPER_MODEL: {"outputTokens": 1},
             },
@@ -673,6 +681,23 @@ class FableAdvisorMcpTests(unittest.TestCase):
                     model_usage=usage,
                 )
                 self.assertEqual(result["decision"], "PLAN_APPROVED")
+
+        opus_usage = {
+            FABLE.OPUS_MODEL: {"outputTokens": 12},
+            FABLE.FABLE_HELPER_MODEL: {"outputTokens": 1},
+        }
+        self.assertEqual(
+            FABLE._validate_runtime_models(opus_usage, FABLE.OPUS_MODEL),
+            sorted(opus_usage),
+        )
+        with self.assertRaisesRegex(FABLE.AdvisorError, "outside the allowed"):
+            FABLE._validate_runtime_models(
+                {
+                    FABLE.OPUS_MODEL: {"outputTokens": 12},
+                    "unknown-helper": {"outputTokens": 1},
+                },
+                FABLE.OPUS_MODEL,
+            )
 
     def test_each_operation_pins_its_authorized_seat_effort(self) -> None:
         self.write_state(planner=self.route("low"))
@@ -744,7 +769,7 @@ class FableAdvisorMcpTests(unittest.TestCase):
         self.write_state(schema=5, advisor=self.route())
         self.assertEqual(FABLE.load_fable_route(self.home)["model"], FABLE.FABLE_MODEL)
 
-    def test_opus_route_pins_primary_and_rejects_every_unverified_helper(self) -> None:
+    def test_opus_route_pins_primary_allows_observed_helper_and_rejects_unknown(self) -> None:
         self.write_state(schema=5, advisor=self.opus_route("xhigh"))
         result, calls = self.invoke_with_results(
             FABLE.review_plan,
@@ -771,7 +796,7 @@ class FableAdvisorMcpTests(unittest.TestCase):
                 model_response="PLAN_APPROVED\nNo material gap.",
                 model_usage={
                     FABLE.OPUS_MODEL: {"outputTokens": 12},
-                    FABLE.FABLE_HELPER_MODEL: {"outputTokens": 1},
+                    "unknown-helper": {"outputTokens": 1},
                 },
             )
         with self.assertRaisesRegex(
