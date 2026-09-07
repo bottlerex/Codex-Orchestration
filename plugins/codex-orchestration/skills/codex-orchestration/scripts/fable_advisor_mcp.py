@@ -52,6 +52,7 @@ ALLOWED_RUNTIME_MODELS_BY_PRIMARY = {
 MODEL_USAGE_STRING_FIELDS = frozenset({"canonicalModel", "provider", "costBasis"})
 CLAUDE_TIMEOUT_SECONDS = 600
 AUTH_TIMEOUT_SECONDS = 20
+SUBPROCESS_DIAGNOSTIC_MAX_CHARS = 4096
 # Applies to the combined user-controlled text sent by one model operation.
 MAX_INPUT_CHARS = 200_000
 PLAN_REVIEW_SCHEMA = {
@@ -158,6 +159,56 @@ class AdvisorError(RuntimeError):
     """Fail-closed error for any bundled Claude bridge operation."""
 
 
+def _classify_subprocess_failure(*outputs: str | None) -> str:
+    """Return a non-sensitive, bounded category for a failed Claude subprocess.
+
+    Raw subprocess output can contain prompt fragments, account information, or
+    provider diagnostics. The MCP response must never return it. Restricting
+    classification to a small, fixed vocabulary preserves useful remediation
+    without turning error responses into an output-exfiltration channel.
+    """
+
+    diagnostic = "\n".join(
+        value[:SUBPROCESS_DIAGNOSTIC_MAX_CHARS]
+        for value in outputs
+        if isinstance(value, str)
+    ).lower()
+    if any(
+        token in diagnostic
+        for token in (
+            "not logged",
+            "authentication",
+            "auth login",
+            "oauth",
+            "unauthorized",
+            "forbidden",
+        )
+    ):
+        return "auth"
+    if any(
+        token in diagnostic
+        for token in ("rate limit", "usage limit", "quota", "limit reached")
+    ):
+        return "usage_limit"
+    if any(
+        token in diagnostic
+        for token in ("network", "connection", "connect", "dns", "enotfound", "econn")
+    ):
+        return "transport"
+    if any(
+        token in diagnostic
+        for token in (
+            "json schema",
+            "invalid schema",
+            "unknown option",
+            "unrecognized option",
+            "unsupported option",
+        )
+    ):
+        return "cli_contract"
+    return "unknown"
+
+
 def codex_home() -> Path:
     value = os.environ.get("CODEX_HOME")
     return Path(value).expanduser() if value else Path.home() / ".codex"
@@ -241,8 +292,10 @@ def _run_json(command: list[str], *, timeout: int) -> dict[str, Any]:
     except OSError as exc:
         raise AdvisorError("Could not run Claude Code authentication check.") from exc
     if result.returncode != 0:
+        category = _classify_subprocess_failure(result.stderr, result.stdout)
         raise AdvisorError(
-            f"Claude Code authentication check exited with {result.returncode}; output withheld."
+            "Claude Code authentication check failed "
+            f"(exit={result.returncode}; category={category}; output withheld)."
         )
     try:
         payload = json.loads(result.stdout)
@@ -573,8 +626,10 @@ def _invoke_fable(
     except OSError as exc:
         raise AdvisorError(f"Could not start {display_name} {operation}.") from exc
     if result.returncode != 0:
+        category = _classify_subprocess_failure(result.stderr, result.stdout)
         raise AdvisorError(
-            f"{display_name} {operation} exited with {result.returncode}; output withheld."
+            f"{display_name} {operation} failed "
+            f"(exit={result.returncode}; category={category}; output withheld)."
         )
     try:
         decoded = json.loads(result.stdout)

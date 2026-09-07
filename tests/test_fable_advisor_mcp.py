@@ -1225,6 +1225,7 @@ class FableAdvisorMcpTests(unittest.TestCase):
             with self.assertRaises(FABLE.AdvisorError) as failure:
                 FABLE.review_plan(secret)
         self.assertIn("17", str(failure.exception))
+        self.assertIn("category=unknown", str(failure.exception))
         self.assertNotIn(secret, str(failure.exception))
 
         timeout = subprocess.TimeoutExpired(["claude"], 600, output=secret, stderr=secret)
@@ -1241,6 +1242,21 @@ class FableAdvisorMcpTests(unittest.TestCase):
                 FABLE.review_plan(secret)
         self.assertIn("timed out", str(timed_out.exception))
         self.assertNotIn(secret, str(timed_out.exception))
+
+    def test_subprocess_failure_categories_are_bounded_and_non_sensitive(self) -> None:
+        secret = "TOP-SECRET-SUBPROCESS-OUTPUT"
+        cases = (
+            ("OAuth token expired", "auth"),
+            ("usage limit reached", "usage_limit"),
+            ("network connection reset", "transport"),
+            ("unknown option --json-schema", "cli_contract"),
+            (f"unexpected failure {secret}", "unknown"),
+        )
+        for output, expected in cases:
+            with self.subTest(output=output):
+                category = FABLE._classify_subprocess_failure(output)
+                self.assertEqual(category, expected)
+                self.assertNotIn(secret, category)
 
     def test_input_bound_is_checked_before_subprocess(self) -> None:
         with mock.patch.object(FABLE.subprocess, "run") as run:
