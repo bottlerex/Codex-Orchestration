@@ -332,7 +332,7 @@ class FableAdvisorMcpTests(unittest.TestCase):
             "natural scheduler outcomes",
             "backlog-close criteria",
             "deferred follow-up unless the packet explicitly makes one an immediate release gate",
-            "Do not require an unbounded terminal state",
+            "For items not explicitly declared immediate release gates, do not require an unbounded terminal state",
             "future observation",
             "natural scheduler convergence",
             "backlog closure",
