@@ -322,6 +322,44 @@ class FableAdvisorMcpTests(unittest.TestCase):
             for name in FABLE.SENSITIVE_ENV:
                 self.assertNotIn(name, sanitized)
 
+    def test_advisor_prompt_bounds_deployment_review_to_decidable_gates(self) -> None:
+        prompt = FABLE.ADVISOR_SYSTEM_PROMPT
+
+        for clause in (
+            "deployment or release review",
+            "gates that are decidable from the packet now",
+            "long-horizon observations",
+            "natural scheduler outcomes",
+            "backlog-close criteria",
+            "deferred follow-up unless the packet explicitly makes one an immediate release gate",
+            "Do not require an unbounded terminal state",
+            "future observation",
+            "natural scheduler convergence",
+            "backlog closure",
+            "unsafe now or contradicts an explicit current requirement",
+            "Never defer immediate safety",
+            "data-loss prevention",
+            "credential handling",
+            "authorization",
+            "ownership conflicts",
+            "destructive or irreversible risks",
+            "obviously necessary immediate gate that the packet omitted",
+            "Raise those as material gaps with PLAN_REVISE",
+        ):
+            with self.subTest(clause=clause):
+                self.assertIn(clause, prompt)
+
+    def test_plan_review_schema_retains_only_bounded_decisions(self) -> None:
+        self.assertEqual(
+            FABLE.PLAN_REVIEW_SCHEMA["properties"]["signal"]["enum"],
+            ["PLAN_APPROVED", "PLAN_REVISE"],
+        )
+        self.assertEqual(
+            FABLE.PLAN_REVIEW_SCHEMA["required"],
+            ["signal", "body"],
+        )
+        self.assertFalse(FABLE.PLAN_REVIEW_SCHEMA["additionalProperties"])
+
     def test_auth_and_model_subprocesses_receive_only_platform_runtime_environment(
         self,
     ) -> None:
