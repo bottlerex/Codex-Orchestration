@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.5 — Unreleased
+
+- Bound bundled Claude Advisor deployment and release review to immediately
+  decidable gates.
+  Long-horizon observations, natural scheduler outcomes, and backlog-close
+  criteria remain deferred unless explicitly required as current release gates;
+  immediate safety and authorization risks remain material.
+
 ## 0.9.4 — Unreleased
 
 - Accept the current Claude CLI's documented runtime metadata string fields while
